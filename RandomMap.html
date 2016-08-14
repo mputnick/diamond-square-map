@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html>
 	<head>
 		<title>randomMap</title>
@@ -8,287 +8,288 @@
 		<table>
 		  <tr>
 			<td>
-		<canvas height='1000' width='1000' id='map'>randomMap</canvas>
+		<canvas height='1000' width='1000' id='screen'>randomMap</canvas>
 			</td>
 			<td align = 'right'>
 				<div id='information' >
 				</div><br><br>
 				<form>
 					Количество клеток<br>
-					<input type='text' size='3' id='powerOfTwo' name='powerOfTwo' value='7'><br>
+					<input type='text' size='3' id='detalization' name='detalization' value='7'><br>
 					Шероховатость<br>
 					<input type='text' size='3' id='roughness' name='roughness' value='1'><br>
 					Возвести высоты в квадрат<br>
 					<input type='checkbox' id='do2power' name='do2power' checked><br><br>
 			
 					Диапазон цветов:<br>
-					R <input type='text' size='1' id='initRcolor' name='initRcolor' value='100'> - 
-											<input type='text' size='3' id='finRcolor' name='finRcolor' value='255'><br>
-					G <input type='text' size='1' id='initGcolor' name='initGcolor' value='100'> - 
+					R <input type='text' size='1' id='initRcolor' name='initRcolor' value='0'> - 
+											<input type='text' size='3' id='finRcolor' name='finRcolor' value='0'><br>
+					G <input type='text' size='1' id='initGcolor' name='initGcolor' value='90'> - 
 											<input type='text' size='3' id='finGcolor' name='finGcolor' value='255'><br>
-					B <input type='text' size='1' id='initBcolor' name='initBcolor' value='100'> - 
-											<input type='text' size='3' id='finBcolor' name='finBcolor' value='255'><br><br>
+					B <input type='text' size='1' id='initBcolor' name='initBcolor' value='30'> - 
+											<input type='text' size='3' id='finBcolor' name='finBcolor' value='40'><br><br>
 			
 					Высота за границей<br>
 					<input type='text' size='3' id='outsideHeight' name='outsideHeight' value='0'><br>
 					Уровень моря<br>
 					<input type='text' size='3' id='waterLevel' name='waterLevel' value='0.001'><br><br>
-					<input type='button' value='Новая карта' id='newMap' name='newMap' onclick='createMap()'>
+					<input type='button' value='Новая карта' id='newMap' name='newMap' >
 				</form>
 			</td>
 		  </tr>
 		</table>
 		<script>
-			
-			function createMap() {
-				var startTime = new Date().getTime();
+			'use strict';
 
-			    if (!checkSizeIsNumber()) {
-					alert('Введите число в поле Шероховатость');
-					return;
+			Array.matrix = function (m, n, initial) {
+				var a, i, j, mat = [];
+				for (i = 0; i < m; i += 1) {
+					a = [];
+					for (j = 0; j < n; j += 1) {
+						a[j] = initial;
+					}
+					mat[i] = a;
 				}
-				
-				var example = document.getElementById('map'),
-					ctx = example.getContext('2d');
-				var do2power = document.getElementById('do2power');
+				return mat;
+			};
 			
-				var palette = ["blue", "green", "orange", "white", "grey"];
+			function Terrain(detalization) {
+				this.size = Math.pow(2, detalization) + 1;
+				this.max = this.size - 1;
+				this.map = Array.matrix(this.size, this.size, 0);
+				this.colors = Array.matrix(this.size, this.size, 0);
+			}
 			
-				var powerOfTwo = document.getElementById('powerOfTwo');
-				var cellsAtSide = Math.pow(2, +powerOfTwo.value) + 1;
+		
+			var newMapButton = document.getElementById('newMap');	
+			newMapButton.onclick = function() {
+				var startTime = Date.now();
 				
+				checkFieldsAreCorrect();
+				
+				var detalization = getValue('detalization');
+				var roughness = getValue('roughness');
+				
+				var screen = document.getElementById('screen');
+				var	ctx = screen.getContext('2d');				
 				var canvas = document.getElementsByTagName('canvas')[0];
-				canvas.width  = cellsAtSide * Math.pow(2, 10 - +powerOfTwo.value);
+				canvas.width  = (Math.pow(2, detalization) + 1) * Math.pow(2, 10 - +detalization);
 				canvas.height = canvas.width;
 				
-				var cellSize = example.height / cellsAtSide; 		 //Считаем canvas квадратным
+				var terrain = new Terrain(detalization);			
+                terrain.generate(roughness);				
+				terrain.defineColors();
+			//	terrain.draw(ctx, canvas);
+				terrain.render(ctx, canvas);
 				
-				var cellColors = initializeCellColors(cellsAtSide);
-				var highnessMap = initializeHighnessMap(cellsAtSide);
-				
-                highnessMap = diamondSquare(cellsAtSide, highnessMap);
-				highnessMap = normalize(highnessMap, cellsAtSide);
-				
-				if (do2power.checked) {
-					highnessMap = raiseToSecondPower(highnessMap);
-				}
-				
-				cellColors = defineColors(highnessMap, cellsAtSide, cellColors, palette);
-				drawMap(cellColors, cellsAtSide, cellSize, ctx);
-
-				var elapsed = new Date().getTime() - startTime;
 				var infElement = document.getElementById('information');
-				infElement.innerHTML = elapsed + ' ms';
-			}	
+				infElement.innerHTML = Date.now() - startTime + ' ms';
+			}
 			
 			
-			function diamondSquare(cellsAtSide, highnessMap) {
-				var currSideSize = cellsAtSide;
-				var sq = {x: 0, y: 0};
-				var di = {x: 0, y: 0};
+			Terrain.prototype.generate = function(roughness) {
 			
-				highnessMap = addRandomToAngles(cellsAtSide, highnessMap);
+				var self = this;
 			
-				while (currSideSize > 2) {
-					for (sq.y = 0; sq.y + currSideSize - 1 < cellsAtSide; sq.y += currSideSize - 1) {
-						for (sq.x = 0; sq.x + currSideSize - 1 < cellsAtSide; sq.x += currSideSize - 1) {
-							highnessMap = countOneSquare(sq.x, sq.y, currSideSize, highnessMap);
+				var currMax = this.max;
+				var x, y;
+			
+				addRandomToAngles();
+			
+				while (currMax > 1) {
+					for (y = currMax / 2; y < this.size; y += currMax) {
+						for (x = currMax / 2; x < this.size; x += currMax) {
+							countOneSquare(x, y, currMax);
 						}					
 					}
 						
-					for (di.y = 0; di.y < cellsAtSide; di.y += currSideSize - 1) {
-						for (di.x = (currSideSize - 1) / 2; di.x < cellsAtSide; di.x += currSideSize - 1) {
-							highnessMap = countOneDiamond(di.x, di.y, currSideSize, highnessMap, cellsAtSide);							
+					for (y = 0; y < this.size; y += currMax) {
+						for (x = currMax / 2; x < this.size; x += currMax) {
+							countOneDiamond(x, y, currMax);							
 						}
 					}
 					
-					for (di.y = (currSideSize - 1) / 2; di.y < cellsAtSide; di.y += currSideSize - 1) {
-						for (di.x = 0; di.x < cellsAtSide; di.x += currSideSize - 1) {
-							highnessMap = countOneDiamond(di.x, di.y, currSideSize, highnessMap, cellsAtSide);
+					for (y = currMax / 2; y < this.size; y += currMax) {
+						for (x = 0; x < this.size; x += currMax) {
+							countOneDiamond(x, y, currMax);
 						}					
-					}					
+					}
 					
-					currSideSize = (currSideSize - 1) / 2 + 1;
+					currMax = currMax / 2;
 				}
-				return highnessMap;
+				
+				normalize();
+				
+				var do2power = document.getElementById('do2power');				
+				if (do2power.checked) {
+					raiseToSecondPower();
+				}
+				
+				function countOneSquare(x, y, currMax) {				
+					self.map[x][y] = (self.map[x - currMax/2][y - currMax/2] +
+									  self.map[x + currMax/2][y - currMax/2] + 
+									  self.map[x + currMax/2][y + currMax/2] + 
+									  self.map[x + currMax/2][y + currMax/2]) / 4 +
+															randomAdd(roughness, currMax);
+				}
+		
+				function countOneDiamond(x, y, currMax) {
+					var roughness = getValue('roughness');
+					var outsideHeight = getValue('outsideHeight');
+					
+					var halfSize = currMax / 2;
+				
+					self.map[x][y] = (getHeight(x, y - halfSize) + getHeight(x + halfSize, y) +
+										getHeight(x, y + halfSize) + getHeight(x - halfSize, y)) / 4 +
+										randomAdd(roughness, currMax);
+				
+					function getHeight(xCoord, yCoord) {
+						if(xCoord < 0 || xCoord > self.max || yCoord < 0 || yCoord > self.max) return outsideHeight;	
+							return self.map[xCoord][yCoord];
+					}
+				}
+				
+				function addRandomToAngles() {
+					self.map[0][0] = Math.random() * self.max;
+					self.map[0][self.max] = Math.random() * self.max;
+					self.map[self.max][0] = Math.random() * self.max;
+					self.map[self.max][self.max] = Math.random() * self.max;
+				}
+				
+				function normalize() {
+					var max = self.map[0][0];
+				
+					for (var i = 0; i < self.size; i++) {
+						for (var j = 0; j < self.size; j++) {
+							if (self.map[i][j] > max) {
+								max = self.map[i][j];
+							}
+						}
+					}				
+					if (max == 0) return;
+				
+					for (var i = 0; i < self.size; i++) {
+						for (var j = 0; j < self.size; j++) {
+							self.map[i][j] /= max;
+						}
+					}
+				}
+					
+				function randomAdd(roughness, currMax) {
+					return (Math.random() * 2 - 1) * roughness * currMax;
+				}
+				
+				function raiseToSecondPower() {
+					for (var i = 0; i < self.map.length; i++) {
+						for (var j = 0; j < self.map[i].length; j++) {
+							self.map[i][j] *= self.map[i][j];
+						}
+					}
+				}
 			}			
 		
-			function countOneSquare(x, y, currSideSize, highnessMap) {				
-				var roughnessElement = document.getElementById('roughness');
-				var roughness = +roughnessElement.value;
-				
-				var sideSize = currSideSize - 1;
-				
-				highnessMap[x + sideSize / 2][y + sideSize / 2] = (highnessMap[x][y] +
-																   highnessMap[x + sideSize][y] + 
-																   highnessMap[x + sideSize][y + sideSize] + 
-																   highnessMap[x][y + sideSize]) / 4 +
-																   randomAdd(roughness, currSideSize);				
-				return highnessMap;
-			}
-		
-			function countOneDiamond(x, y, currSideSize, highnessMap, cellsAtSide) {
-				var roughnessElement = document.getElementById('roughness');
-				var roughness = +roughnessElement.value;
-				
-				var outsideHeightElement = document.getElementById('outsideHeight');
-				var outsideHeight = +outsideHeightElement.value;
-				
-				var halfSize = (currSideSize - 1) / 2;
-								
-				highnessMap[x][y] = (getHeight(x, y - halfSize) + getHeight(x + halfSize, y) +
-									 getHeight(x, y + halfSize) + getHeight(x - halfSize, y)) / 4 +
-									 randomAdd(roughness, currSideSize);
-				
-				function getHeight(xCoord, yCoord) {
-					if(xCoord < 0 || xCoord > cellsAtSide - 1 || yCoord < 0 || yCoord > cellsAtSide - 1) return outsideHeight;	
-						return highnessMap[xCoord][yCoord];
-				}
-				
-				return highnessMap;
-			}
-		
-			function randomAdd(roughness, currSideSize) {
-				return (Math.random() * 2 - 1) * roughness * currSideSize;
-			}
 			
-			function addRandomToAngles(cellsAtSide, highnessMap) {
-				highnessMap[0][0] = Math.random() * cellsAtSide;
-				highnessMap[0][cellsAtSide - 1] = Math.random() * cellsAtSide;
-				highnessMap[cellsAtSide - 1][0] = Math.random() * cellsAtSide;
-				highnessMap[cellsAtSide - 1][cellsAtSide - 1] = Math.random() * cellsAtSide;
+			Terrain.prototype.defineColors = function() {
+			
+				var self = this;
+			
+				var waterLevel = getValue('waterLevel');
 				
-				return highnessMap;
-			}
-		
-			function normalize(highnessMap, cellsAtSide) {
-				var max = highnessMap[0][0];
-				
-				for (var i = 0; i < cellsAtSide; i++) {
-					for (var j = 0; j < cellsAtSide; j++) {
-						if (highnessMap[i][j] > max) {
-							max = highnessMap[i][j];
-						}
-					}
-				}				
-				if (max == 0) return highnessMap;
-				
-				for (var i = 0; i < cellsAtSide; i++) {
-					for (var j = 0; j < cellsAtSide; j++) {
-						highnessMap[i][j] /= max;
-					}
-				}
-				
-				return highnessMap;
-			}
-		
-			function defineColors(highnessMap, cellsAtSide, cellColors, palette) {
-				var waterLevelElement = document.getElementById('waterLevel');
-				var waterLevel = +waterLevelElement.value;
-				
-				var initRcolorElement, finRcolorElement, initGcolorElement, finGcolorElement, initBcolorElement, finBcolorElement;
 				var initR, finR, initG, finG, initB, finB;
-				
 				getColorValues();
 				
 				var RGBcolors = {R: '00', G: '00', B: '00'};
 				
-				for (var i = 0; i < cellsAtSide; i++) {
-					for(var j = 0; j < cellsAtSide; j++) {
-						if (highnessMap[i][j] <= waterLevel) {
-							cellColors[i][j] = palette[0];
+				for (var i = 0; i < this.size; i++) {
+					for(var j = 0; j < this.size; j++) {
+						if (this.map[i][j] <= waterLevel) {
+							this.colors[i][j] = 'blue';
 						} else {
 						
 							RGBcolors.R = getColorComponent(initR, finR);
 							RGBcolors.G = getColorComponent(initG, finG);
 							RGBcolors.B = getColorComponent(initB, finB);
 							
-							cellColors[i][j] = '#' + RGBcolors.R + RGBcolors.G + RGBcolors.B;
+							this.colors[i][j] = '#' + RGBcolors.R + RGBcolors.G + RGBcolors.B;
 						}
 					}
 				}
-				return cellColors;
+				
+				function getColorValues() {
+					initR = getValue('initRcolor');	
+					finR = getValue('finRcolor');
+				
+					initG = getValue('initGcolor');
+					finG = getValue('finGcolor');
+				
+					initB = getValue('initBcolor');
+					finB = getValue('finBcolor');	
+				}
 				
 				function getColorComponent(init, fin) {
-					var component = Math.floor((highnessMap[i][j] - waterLevel) / (1 - waterLevel) * (fin - init) + init);
+					var component = Math.floor((self.map[i][j] - waterLevel) / (1 - waterLevel) * (fin - init) + init);
 					component = component.toString(16);
 					if(component.length == 1) {
 						component = '0' + component;
 					}
 					return component;
 				}
-				
-				function getColorValues() {
-					initRcolorElement = document.getElementById('initRcolor');
-					initR = +initRcolorElement.value;
-					finRcolorElement = document.getElementById('finRcolor');
-					finR = +finRcolorElement.value;
-				
-					initGcolorElement = document.getElementById('initGcolor');
-					initG = +initGcolorElement.value;
-					finGcolorElement = document.getElementById('finGcolor');
-					finG = +finGcolorElement.value;
-				
-					initBcolorElement = document.getElementById('initBcolor');
-					initB = +initBcolorElement.value;
-					finBcolorElement = document.getElementById('finBcolor');
-					finB = +finBcolorElement.value;		
-				}
 			}
 		
-			function drawMap(cellColors, cellsAtSide, cellSize, ctx) {
-				for(var j = 0; j < cellsAtSide; j++) {
-					for(var i = 0; i < cellsAtSide; i++) {
+		
+			Terrain.prototype.draw = function(ctx, canvas) {
+				var cellSize = canvas.width / this.size; 		 //Считаем canvas квадратным
+				for(var j = 0; j < this.size; j++) {
+					for(var i = 0; i < this.size; i++) {
 				
 						var x = i * cellSize;
 						var y = j * cellSize;
 						
-						ctx.fillStyle = cellColors[i][j];
+						ctx.fillStyle = this.colors[i][j];
 						ctx.fillRect(x, y, cellSize, cellSize);
 					}
 				}
-			}		
+			}
+			
+			
+			Terrain.prototype.render = function(ctx, canvas) {
+				
+				var self = this;
+				var a = {};
+			
+				var cellSize = canvas.width / this.size; 		 //Считаем canvas квадратным
+				for(var j = 0; j < this.size; j++) {
+					for(var i = 0; i < this.size; i++) {
+						a = iso(i, j);
+						a.x = i * cellSize;
+						a.y = j * cellSize;
+						
+						
+						ctx.fillStyle = this.colors[i][j];
+						ctx.fillRect(a.x, a.y, cellSize, cellSize);
+					}
+				}
 
-			function checkSizeIsNumber() {
+				
+				function iso(x, y) {
+				  return {
+					x: 0.5 * (self.size + x - y),
+					y: 0.5 * (x + y)
+				  };
+				}
+				
+			}
+
+			
+			function checkFieldsAreCorrect() {
 				var roughness = document.getElementById('roughness');
 				return !isNaN(parseFloat(roughness.value)) && isFinite(roughness.value);
 			}
-		
-			function initializeCellColors(cellsAtSide) {
-				var cellColors = [];
-				for (var i = 0; i < cellsAtSide; i++) {
-					cellColors[i] = [];
-					for (var j = 0; j < cellsAtSide; j++) {
-						cellColors[i][j] = 0;
-					}
-				}
-				return cellColors;
-			}		
-		
-			function initializeHighnessMap(cellsAtSide) {
-				var highnessMap = [];
-				for (var i = 0; i < cellsAtSide; i++) {
-					highnessMap[i] = [];
-					for (var j = 0; j < cellsAtSide; j++) {
-						highnessMap[i][j] = 0;
-					}
-				}
-				return highnessMap;
-			}		
-		
-			function raiseToSecondPower(highnessMap) {
-				for (var i = 0; i < highnessMap.length; i++) {
-					for (var j = 0; j < highnessMap[i].length; j++) {
-						highnessMap[i][j] *= highnessMap[i][j];
-					}
-				}
-				return highnessMap;
+					
+			function getValue(elementId) {
+				var element = document.getElementById(elementId);
+				return +element.value;
 			}
-		
-		
-		
-		
-		
 		
 		
 		</script>
